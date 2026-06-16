@@ -5,7 +5,7 @@ import {
 } from '../db.js';
 import {
   html, $, $$, on, navigate, formatDate, estimateReadTime,
-  genreColor, GENRES, imageToBase64, compressImage
+  genreColor, GENRES, imageToBase64, compressImage, footerHtml
 } from '../app.js';
 
 const COVERS = [
@@ -118,6 +118,8 @@ export async function renderStory(params) {
         <div style="margin-top:32px;text-align:center">
           <button class="btn-primary" id="btn-read-first" style="padding:12px 36px"><i class="fa-solid fa-book-open-reader"></i> Start Reading</button>
         </div>` : ''}
+
+        ${footerHtml()}
       </div>
     </div>
   `);

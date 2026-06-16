@@ -4,7 +4,26 @@ const routes = {};
 let currentCleanup = null;
 
 export function route(path, handler) { routes[path] = handler; }
-export function navigate(path) { window.location.hash = path; }
+
+let _navTimer = null;
+export function navigate(path) {
+  if (_navTimer) { clearTimeout(_navTimer); _navTimer = null; }
+  const view = document.querySelector('#app-view');
+  if (view && view.children.length) {
+    view.style.transition = 'opacity .16s ease, transform .16s ease';
+    view.style.opacity = '0';
+    view.style.transform = 'translateY(-5px)';
+    _navTimer = setTimeout(() => {
+      _navTimer = null;
+      view.style.transition = '';
+      view.style.opacity = '';
+      view.style.transform = '';
+      window.location.hash = path;
+    }, 165);
+  } else {
+    window.location.hash = path;
+  }
+}
 
 function matchRoute(hash) {
   const path = hash.slice(1) || '/';
@@ -28,10 +47,13 @@ function matchRoute(hash) {
 
 export function startRouter() {
   async function onHashChange() {
-    const result = matchRoute(window.location.hash || '#/');
-
     if (currentCleanup) { currentCleanup(); currentCleanup = null; }
 
+    // Reset scroll to top on every route change
+    const view = document.querySelector('#app-view');
+    if (view) view.scrollTop = 0;
+
+    const result = matchRoute(window.location.hash || '#/');
     if (!result) { navigate('/'); return; }
 
     try {
@@ -119,6 +141,29 @@ export function imageToBase64(file) {
     reader.onerror = reject;
     reader.readAsDataURL(file);
   });
+}
+
+// ─── Shared footer (home, story, settings, reader) ───
+export function footerHtml() {
+  return `
+    <div class="footer">
+      <div class="footer-logo">
+        <svg class="logo-bf-icon" viewBox="0 0 24 24" fill="none">
+          <defs><linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="#e07aff" /><stop offset="100%" stop-color="#8808c3" />
+          </linearGradient></defs>
+          <path d="M3 4C6 4 11 9 12 12C13 9 18 4 21 4C19 9 14 11 12 12C14 13 19 15 21 20C18 20 13 15 12 12C11 15 6 20 3 20C5 15 10 13 12 12C10 11 5 9 3 4Z" fill="url(#logoGrad)"/>
+        </svg>
+        <span class="logo-text">anstory</span>
+      </div>
+      <div class="footer-tagline">Every thought deserves to be told</div>
+      <div class="footer-social">
+        <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
+        <a href="#" aria-label="TikTok"><i class="fa-brands fa-tiktok"></i></a>
+        <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
+      </div>
+      <div class="footer-copy">Copyright by Xannn</div>
+    </div>`;
 }
 
 export function compressImage(base64, maxWidth = 1200, quality = 0.8) {

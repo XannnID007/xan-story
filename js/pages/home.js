@@ -1,9 +1,6 @@
 // ═══ Home / Landing page ═══
-import {
-  getAllStories, getChapters, getPanels, getAllProgress,
-  checkAdminStatus
-} from '../db.js';
-import { html, $, $$, on, navigate, timeAgo, estimateReadTime, genreColor } from '../app.js';
+import { getAllStories, getChapters, getPanels, getAllProgress } from '../db.js';
+import { html, $, $$, on, navigate, timeAgo, estimateReadTime, genreColor, footerHtml } from '../app.js';
 
 // Purple-only cover gradients (used when a story has no cover image)
 const COVERS = [
@@ -177,16 +174,7 @@ export async function renderHome() {
           <p>Your published stories will appear here</p>
         </div>`}
 
-        <div class="footer">
-          <div class="footer-logo">${LOGO}<span class="logo-text">anstory</span></div>
-          <div class="footer-tagline">Every thought deserves to be told</div>
-          <div class="footer-social">
-            <a href="#" aria-label="Instagram"><i class="fa-brands fa-instagram"></i></a>
-            <a href="#" aria-label="TikTok"><i class="fa-brands fa-tiktok"></i></a>
-            <a href="#" aria-label="Facebook"><i class="fa-brands fa-facebook-f"></i></a>
-          </div>
-          <div class="footer-copy">© 2026 xanstory. Made with love.</div>
-        </div>
+        ${footerHtml()}
         <div style="height:80px"></div>
       </div>
     </div>
@@ -251,16 +239,6 @@ export async function renderHome() {
         el.onclick = () => navigate(`/story/${el.dataset.id}`);
       });
       $('#btn-see-all').remove();
-    });
-
-    // Admin-only "create story" button in hero
-    checkAdminStatus(isAdmin => {
-      if (!isAdmin || $('#btn-admin-new')) return;
-      const hero = $('.hero');
-      if (!hero) return;
-      hero.insertAdjacentHTML('beforeend',
-        `<button id="btn-admin-new" class="hero-cta" style="margin-top:18px"><i class="fa-solid fa-feather"></i> Write a new story</button>`);
-      on('#btn-admin-new', 'click', () => navigate('/new'));
     });
   }
 

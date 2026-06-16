@@ -1,9 +1,9 @@
 // ═══ Reader — webtoon-style vertical scroll ═══
 import { getStory, getChapter, getChapters, getPanels, saveProgress } from '../db.js';
-import { html, $, on, navigate } from '../app.js';
+import { html, $, on, navigate, footerHtml } from '../app.js';
 
 export async function renderReader(params) {
-  const storyId = parseInt(params.storyId);
+  const storyId   = parseInt(params.storyId);
   const chapterId = parseInt(params.chapterId);
 
   const [story, chapter, chapters, panels] = await Promise.all([
@@ -15,7 +15,7 @@ export async function renderReader(params) {
 
   if (!story || !chapter) { navigate('/'); return; }
 
-  const chIdx = chapters.findIndex(c => c.id === chapterId);
+  const chIdx  = chapters.findIndex(c => c.id === chapterId);
   const prevCh = chIdx > 0 ? chapters[chIdx - 1] : null;
   const nextCh = chIdx >= 0 && chIdx < chapters.length - 1 ? chapters[chIdx + 1] : null;
 
@@ -61,13 +61,37 @@ export async function renderReader(params) {
         </div>
       </div>
       ` : ''}
+
+      <div style="max-width:700px;margin:0 auto;padding:0 20px">${footerHtml()}</div>
+
+      <!-- Exit popup -->
+      <div class="rd-exit-popup" id="rd-exit-popup">
+        <div class="rd-exit-popup-card">
+          <h4>Keluar dari chapter ini?</h4>
+          <p>Progress terakhirmu sudah tersimpan otomatis saat membaca.</p>
+          <div class="rd-exit-actions">
+            <button class="btn-primary" id="btn-exit-save">
+              <i class="fa-solid fa-floppy-disk"></i> Simpan & Keluar
+            </button>
+            <button class="btn-secondary" id="btn-exit-nosave">Keluar saja</button>
+          </div>
+        </div>
+      </div>
     </div>
   `);
 
-  // ─── Scroll: progress bar + auto-hide header ───
   const readerPage = $('#reader-page');
-  let ticking = false;
 
+  // Apply chapter background image (set by admin in editor)
+  if (chapter.bgImage) {
+    readerPage.style.backgroundImage =
+      `linear-gradient(rgba(10,4,16,0.88), rgba(10,4,16,0.88)), url(${chapter.bgImage})`;
+    readerPage.style.backgroundSize     = 'auto, cover';
+    readerPage.style.backgroundPosition = 'center, center';
+  }
+
+  // ─── Scroll: progress bar + auto-hide header ───
+  let ticking = false;
   readerPage.addEventListener('scroll', () => {
     if (ticking) return;
     ticking = true;
@@ -82,7 +106,7 @@ export async function renderReader(params) {
     });
   }, { passive: true });
 
-  // ─── Save progress (debounced) ───
+  // ─── Auto-save progress (debounced 2s) ───
   let saveTimer = null;
   const currentPct = () => {
     const max = readerPage.scrollHeight - readerPage.clientHeight;
@@ -93,62 +117,93 @@ export async function renderReader(params) {
     saveTimer = setTimeout(() => saveProgress(storyId, chapterId, currentPct()), 2000);
   }, { passive: true });
 
-  // Tap content to toggle header
+  // Tap content area to toggle header visibility
   on('#reader-content', 'click', e => {
     if (e.target.closest('button')) return;
     $('#reader-header')?.classList.toggle('hidden');
   });
 
-  // ─── Navigation ───
-  on('#btn-rd-back', 'click', () => navigate(`/story/${storyId}`));
-  on('#btn-rd-edit', 'click', () => navigate(`/edit/${storyId}/${chapterId}`));
-  if ($('#btn-go-edit')) on('#btn-go-edit', 'click', () => navigate(`/edit/${storyId}/${chapterId}`));
-  if ($('#btn-next-ch')) on('#btn-next-ch', 'click', () => navigate(`/read/${storyId}/${nextCh.id}`));
-  if ($('#btn-next-ch2')) on('#btn-next-ch2', 'click', () => navigate(`/read/${storyId}/${nextCh.id}`));
-  if ($('#btn-prev-ch')) on('#btn-prev-ch', 'click', () => navigate(`/read/${storyId}/${prevCh.id}`));
-  if ($('#btn-all-ch')) on('#btn-all-ch', 'click', () => navigate(`/story/${storyId}`));
+  // ─── Back button — custom exit popup ───
+  on('#btn-rd-back', 'click', () => {
+    $('#rd-exit-popup').classList.add('active');
+  });
+  on('#btn-exit-save', 'click', async () => {
+    clearTimeout(saveTimer);
+    await saveProgress(storyId, chapterId, currentPct());
+    navigate(`/story/${storyId}`);
+  });
+  on('#btn-exit-nosave', 'click', () => navigate(`/story/${storyId}`));
+  on('#rd-exit-popup', 'click', e => {
+    if (e.target === e.currentTarget) $('#rd-exit-popup').classList.remove('active');
+  });
 
-  // Save progress on leave
+  // ─── Other navigation ───
+  on('#btn-rd-edit', 'click',   () => navigate(`/edit/${storyId}/${chapterId}`));
+  if ($('#btn-go-edit'))  on('#btn-go-edit',  'click', () => navigate(`/edit/${storyId}/${chapterId}`));
+  if ($('#btn-next-ch'))  on('#btn-next-ch',  'click', () => navigate(`/read/${storyId}/${nextCh.id}`));
+  if ($('#btn-next-ch2')) on('#btn-next-ch2', 'click', () => navigate(`/read/${storyId}/${nextCh.id}`));
+  if ($('#btn-prev-ch'))  on('#btn-prev-ch',  'click', () => navigate(`/read/${storyId}/${prevCh.id}`));
+  if ($('#btn-all-ch'))   on('#btn-all-ch',   'click', () => navigate(`/story/${storyId}`));
+
+  // Cleanup: save progress on navigate away
   return () => {
     clearTimeout(saveTimer);
     saveProgress(storyId, chapterId, currentPct());
   };
 }
 
-// Supports both the current editor format (text/character/image)
-// and the legacy format (content/characterName) for old data.
+// ─── Panel renderer ───
 function renderPanel(panel) {
-  const text = panel.text ?? panel.content ?? '';
-  const image = panel.image ?? (typeof panel.content === 'string' && panel.content.startsWith('data:') ? panel.content : null);
+  const text     = panel.text ?? panel.content ?? '';
+  const image    = panel.image ?? (typeof panel.content === 'string' && panel.content.startsWith('data:') ? panel.content : null);
   const charName = panel.character ?? panel.characterName ?? '';
 
   switch (panel.type) {
     case 'image':
-    case 'scene':
-      return image
-        ? `<div class="rd-panel rd-scene"><img src="${image}" alt="Scene" loading="lazy" /></div>`
-        : `<div class="rd-panel rd-scene rd-scene-empty"><div class="rd-scene-placeholder"><i class="fa-solid fa-image"></i></div></div>`;
+    case 'scene': {
+      if (!image) {
+        return `<div class="rd-panel rd-scene rd-scene-empty"><div class="rd-scene-placeholder"><i class="fa-solid fa-image"></i></div></div>`;
+      }
+      const sizeMap  = { small: '40%', medium: '65%', full: '100%' };
+      const w        = sizeMap[panel.imageSize] || '100%';
+      const frame    = panel.imageFrame || 'none';
+      const imgStyle = `width:${w};display:block;margin:0 auto;`;
+      return `<div class="rd-panel rd-scene rd-img-frame-${frame}">
+        <img src="${image}" alt="Scene" loading="lazy" style="${imgStyle}" />
+      </div>`;
+    }
 
     case 'dialogue':
       return `
         <div class="rd-panel rd-dialogue">
           ${charName ? `<div class="rd-char-name">${escapeHtml(charName)}</div>` : ''}
-          <div class="rd-dialogue-bubble"><p>"${formatText(text)}"</p></div>
+          <div class="rd-dialogue-bubble"><p>"${sanitizeAndFormat(text)}"</p></div>
         </div>`;
 
     case 'divider':
       return `<div class="rd-panel rd-divider"><span>· · ·</span></div>`;
 
-    default: // narration
-      return `<div class="rd-panel rd-narration"><p>${formatText(text)}</p></div>`;
+    default: { // narration
+      const style = panel.narrateStyle || 'classic';
+      return `<div class="rd-panel rd-narration style-${style}"><p>${sanitizeAndFormat(text)}</p></div>`;
+    }
   }
 }
 
 function escapeHtml(str) {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
-function formatText(text) {
+// Escape everything, then restore only allowed tags: <b> <em> <u> <br> <p>
+function sanitizeAndFormat(text) {
   if (!text) return '';
-  return escapeHtml(text).replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+  let s = escapeHtml(text);
+  s = s
+    .replace(/&lt;b&gt;/gi,          '<b>').replace(/&lt;\/b&gt;/gi,   '</b>')
+    .replace(/&lt;em&gt;/gi,         '<em>').replace(/&lt;\/em&gt;/gi, '</em>')
+    .replace(/&lt;u&gt;/gi,          '<u>').replace(/&lt;\/u&gt;/gi,   '</u>')
+    .replace(/&lt;br\s*\/?&gt;/gi,   '<br>')
+    .replace(/&lt;p&gt;/gi,          '<p>').replace(/&lt;\/p&gt;/gi,   '</p>');
+  s = s.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+  return s;
 }

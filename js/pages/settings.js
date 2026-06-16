@@ -1,6 +1,6 @@
 // ═══ Settings — admin, backup, reading history ═══
 import { getAllStories, exportAllData, clearProgress, checkAdminStatus, adminLogout } from '../db.js';
-import { html, $, on, navigate } from '../app.js';
+import { html, $, on, navigate, footerHtml } from '../app.js';
 
 export async function renderSettings() {
   const stories = await getAllStories();
@@ -66,6 +66,8 @@ export async function renderSettings() {
             </div>
           </div>
         </div>
+
+        ${footerHtml()}
       </div>
 
       <div id="settings-toast" class="settings-toast"></div>

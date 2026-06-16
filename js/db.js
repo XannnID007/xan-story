@@ -157,6 +157,9 @@ export async function savePanels(chapterId, panelsArray) {
       text: p.text || '',
       character: p.character || '',
       image: p.image || null,
+      imageSize: p.imageSize || 'full',
+      imageFrame: p.imageFrame || 'none',
+      narrateStyle: p.narrateStyle || 'classic',
       order: i
     });
   }

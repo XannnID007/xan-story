@@ -1,5 +1,6 @@
 // ═══ App bootstrap: routes + nav + splash ═══
 import { route, startRouter, initTheme } from './app.js';
+import { checkAdminStatus } from './db.js';
 import { renderHome } from './pages/home.js';
 import { renderStory } from './pages/story.js';
 import { renderEditor } from './pages/editor.js';
@@ -17,17 +18,17 @@ route('/new', renderNewStory);
 route('/settings', renderSettings);
 route('/login', renderLogin);
 
-// ─── Bottom nav ───
-function updateBottomNav() {
+// ─── Fab menu (corner butterfly trigger + icon flyout) ───
+function updateFabMenu() {
   const hash = window.location.hash || '#/';
-  const nav = document.getElementById('bottom-nav');
-  if (!nav) return;
+  const menu = document.getElementById('fab-menu');
+  if (!menu) return;
 
   // Hide on immersive/standalone pages
   const hideOn = ['/read/', '/edit/', '/login', '/new'];
-  nav.style.display = hideOn.some(p => hash.includes(p)) ? 'none' : 'flex';
+  menu.style.display = hideOn.some(p => hash.includes(p)) ? 'none' : 'flex';
 
-  nav.querySelectorAll('.bnav-item').forEach(el => {
+  menu.querySelectorAll('.fab-item[data-route]').forEach(el => {
     const target = el.dataset.route;
     const isHome = target === '/' && (hash === '#/' || hash === '#' || hash.startsWith('#/story/'));
     const isOther = target !== '/' && hash.includes(target);
@@ -35,14 +36,41 @@ function updateBottomNav() {
   });
 }
 
-function initBottomNav() {
-  const nav = document.getElementById('bottom-nav');
-  if (!nav) return;
-  nav.querySelectorAll('.bnav-item').forEach(el => {
-    el.addEventListener('click', () => { window.location.hash = el.dataset.route; });
+function closeFabMenu() {
+  document.getElementById('fab-menu-items')?.classList.remove('open');
+  document.getElementById('fab-toggle')?.classList.remove('open');
+}
+
+function initFabMenu() {
+  const menu = document.getElementById('fab-menu');
+  const toggle = document.getElementById('fab-toggle');
+  const items = document.getElementById('fab-menu-items');
+  if (!menu || !toggle || !items) return;
+
+  toggle.addEventListener('click', e => {
+    e.stopPropagation();
+    items.classList.toggle('open');
+    toggle.classList.toggle('open');
   });
-  window.addEventListener('hashchange', updateBottomNav);
-  updateBottomNav();
+  document.addEventListener('click', e => {
+    if (!menu.contains(e.target)) closeFabMenu();
+  });
+
+  items.querySelectorAll('.fab-item[data-route]').forEach(el => {
+    el.addEventListener('click', () => {
+      window.location.hash = el.dataset.route;
+      closeFabMenu();
+    });
+  });
+
+  window.addEventListener('hashchange', () => { closeFabMenu(); updateFabMenu(); });
+  updateFabMenu();
+
+  // Write button only visible to logged-in admin
+  checkAdminStatus(isAdmin => {
+    const writeBtn = document.getElementById('fab-write');
+    if (writeBtn) writeBtn.style.display = isAdmin ? 'flex' : 'none';
+  });
 }
 
 // ─── Splash ───
@@ -59,7 +87,7 @@ function hideSplash() {
 try {
   initTheme();
   startRouter();
-  initBottomNav();
+  initFabMenu();
   hideSplash();
 } catch (err) {
   console.error('Boot error:', err);
