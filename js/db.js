@@ -1,9 +1,17 @@
-// ─── FIREBASE SDK INTEGRATION via CDN ───
+// ═══════════════════════════════════════════
+// XAN-STORY — Data Layer (Firebase Firestore)
+// Stories, chapters, panels live in the cloud.
+// Reading progress stays in each visitor's browser.
+// ═══════════════════════════════════════════
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import { getFirestore, collection, doc, getDocs, getDoc, setDoc, updateDoc, deleteDoc, query, where, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {
+  getFirestore, collection, doc, getDocs, getDoc,
+  setDoc, deleteDoc, query, where, orderBy
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
+} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 
-// 🔥 MASUKKAN CONFIG FIREBASE KAMU DI SINI (DARI LANGKAH 2)
 const firebaseConfig = {
   apiKey: "AIzaSyCXGIdsbHvfZsO55WxpYkaxv8DwuuxbFQE",
   authDomain: "xanstory-07.firebaseapp.com",
@@ -13,218 +21,190 @@ const firebaseConfig = {
   appId: "1:242147614175:web:89a93ad0c528314252b86a"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// ─── HELPER MENGUBAH ID MENJADI NUMBER COMPATIBLE ───
-// Karena Firestore memakai String ID sedangkan router kodemu memakai Number (parseInt)
+// IDs are timestamps stored as Firestore string doc-ids.
+// The router works with numbers, so we convert at the edges.
 const toNumId = id => parseInt(id);
+const snapToList = snap => snap.docs.map(d => ({ id: toNumId(d.id), ...d.data() }));
 
-// ─── LOGIN & MANAGEMENT UTILITY FOR IHSAN ───
-// Kamu bisa memanggil fungsi ini via Browser Console untuk login sebagai admin
-window.xanLogin = async (email, password) => {
-  try {
-    const userCredential = await signInWithEmailAndPassword(auth, email, password);
-    console.log("Login Sukses! Kamu sekarang admin:", userCredential.user.email);
-    alert("Login Admin Sukses! Silakan refresh halaman.");
-  } catch (error) {
-    console.error("Login Gagal:", error.message);
-    alert("Gagal Login: " + error.message);
-  }
-};
+// ─── Auth ───
 
-window.xanLogout = async () => {
-  await signOut(auth);
-  console.log("Logged out.");
-  alert("Logged out dari sistem admin.");
-};
-
-// Cek status login secara real-time untuk menyembunyikan/menampilkan tombol aksi
 export function checkAdminStatus(callback) {
-  onAuthStateChanged(auth, (user) => {
-    if (user) callback(true);
-    else callback(false);
-  });
+  onAuthStateChanged(auth, user => callback(!!user, user));
 }
 
 export async function adminLogin(email, password) {
-  try {
-    await signInWithEmailAndPassword(auth, email, password);
-    alert("Login Admin Sukses!");
-    window.location.reload(); // Refresh otomatis biar tombol admin muncul
-  } catch (error) {
-    alert("Gagal Login: " + error.message);
-  }
+  await signInWithEmailAndPassword(auth, email, password);
 }
 
-// ─── SEED DATA FUNCTION (Dikosongkan agar tidak menimpa Firebase) ───
-export async function seedDemoData() {
-  // Fungsi ini dikosongkan karena data sekarang hidup secara online di Cloud
-  return true;
+export async function adminLogout() {
+  await signOut(auth);
 }
 
-// ─── STORIES CRUD ───
+// Console helpers (optional, handy while developing)
+window.xanLogin = (email, password) =>
+  adminLogin(email, password)
+    .then(() => alert('Login admin sukses! Silakan refresh.'))
+    .catch(err => alert('Gagal login: ' + err.message));
+window.xanLogout = () => adminLogout().then(() => alert('Logged out.'));
+
+// ─── Stories ───
+
 export async function getAllStories() {
   try {
-    const q = query(collection(db, "stories"), orderBy("updatedAt", "desc"));
-    const snap = await getDocs(q);
-    const data = [];
-    snap.forEach(doc => {
-      data.push({ id: toNumId(doc.id), ...doc.data() });
-    });
-    return data;
-  } catch (e) { console.error(e); return []; }
+    const snap = await getDocs(query(collection(db, 'stories'), orderBy('updatedAt', 'desc')));
+    return snapToList(snap);
+  } catch (e) { console.error('getAllStories:', e); return []; }
 }
 
 export async function getStory(id) {
   try {
-    const docRef = doc(db, "stories", String(id));
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: toNumId(docSnap.id), ...docSnap.data() };
-    }
-    return null;
-  } catch (e) { console.error(e); return null; }
+    const snap = await getDoc(doc(db, 'stories', String(id)));
+    return snap.exists() ? { id: toNumId(snap.id), ...snap.data() } : null;
+  } catch (e) { console.error('getStory:', e); return null; }
 }
 
 export async function addStory(data) {
-  const id = Date.now(); // Gunakan waktu saat ini sebagai ID unik
-  const docRef = doc(db, "stories", String(id));
-  
-  await setDoc(docRef, {
-    ...data,
-    updatedAt: Date.now(),
-    createdAt: Date.now()
+  const id = Date.now();
+  await setDoc(doc(db, 'stories', String(id)), {
+    title: data.title || 'Untitled',
+    description: data.description || '',
+    genre: data.genre || 'Thoughts',
+    coverImage: data.coverImage || null,
+    status: data.status || 'draft',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
   });
-  
   return id;
 }
 
 export async function updateStory(id, data) {
-  const docRef = doc(db, "stories", String(id));
-  data.updatedAt = Date.now();
-  await setDoc(docRef, data, { merge: true });
+  await setDoc(doc(db, 'stories', String(id)), { ...data, updatedAt: Date.now() }, { merge: true });
 }
 
 export async function deleteStory(id) {
-  // Hapus Cerita
-  await deleteDoc(doc(db, "stories", String(id)));
-  
-  // Clean up chapters terkait
-  const chSnap = await getDocs(query(collection(db, "chapters"), where("storyId", "==", toNumId(id))));
-  chSnap.forEach(async (cDoc) => {
-    await deleteChapter(toNumId(cDoc.id));
-  });
+  const chSnap = await getDocs(query(collection(db, 'chapters'), where('storyId', '==', toNumId(id))));
+  for (const chDoc of chSnap.docs) await deleteChapter(toNumId(chDoc.id));
+  await deleteDoc(doc(db, 'stories', String(id)));
 }
 
-// ─── CHAPTERS CRUD ───
+// ─── Chapters ───
+// NOTE: where() + orderBy() on different fields requires a Firestore
+// composite index, so we filter in the query and sort client-side.
+// Chapter IDs are creation timestamps → sorting by id = creation order.
+
 export async function getChapters(storyId) {
   try {
-    const q = query(collection(db, "chapters"), where("storyId", "==", toNumId(storyId)), orderBy("updatedAt", "asc"));
-    const snap = await getDocs(q);
-    const data = [];
-    snap.forEach(doc => {
-      data.push({ id: toNumId(doc.id), ...doc.data() });
-    });
-    return data;
-  } catch (e) { console.error(e); return []; }
+    const snap = await getDocs(query(collection(db, 'chapters'), where('storyId', '==', toNumId(storyId))));
+    return snapToList(snap).sort((a, b) => a.id - b.id);
+  } catch (e) { console.error('getChapters:', e); return []; }
 }
 
 export async function getChapter(id) {
   try {
-    const docRef = doc(db, "chapters", String(id));
-    const docSnap = await getDoc(docRef);
-    if (docSnap.exists()) {
-      return { id: toNumId(docSnap.id), ...docSnap.data() };
-    }
-    return null;
-  } catch (e) { console.error(e); return null; }
+    const snap = await getDoc(doc(db, 'chapters', String(id)));
+    return snap.exists() ? { id: toNumId(snap.id), ...snap.data() } : null;
+  } catch (e) { console.error('getChapter:', e); return null; }
+}
+
+export async function addChapter(storyId, title) {
+  const id = Date.now();
+  await setDoc(doc(db, 'chapters', String(id)), {
+    storyId: toNumId(storyId),
+    title: title || 'Untitled Chapter',
+    createdAt: Date.now(),
+    updatedAt: Date.now()
+  });
+  return id;
 }
 
 export async function updateChapter(id, data) {
-  const docRef = doc(db, "chapters", String(id));
-  data.updatedAt = Date.now();
-  await setDoc(docRef, data, { merge: true });
-}
-
-export async function addChapter(storyId) {
-  const chId = Date.now(); // Gunakan timestamp unik sebagai ID numerik berbentuk string
-  const docRef = doc(db, "chapters", String(chId));
-  await setDoc(docRef, {
-    storyId: toNumId(storyId),
-    title: "Untitled Chapter",
-    updatedAt: Date.now()
-  });
-  return chId;
+  await setDoc(doc(db, 'chapters', String(id)), { ...data, updatedAt: Date.now() }, { merge: true });
 }
 
 export async function deleteChapter(id) {
-  await deleteDoc(doc(db, "chapters", String(id)));
-  
-  // Clean up panels terkait di dalam chapter ini
-  const pSnap = await getDocs(query(collection(db, "panels"), where("chapterId", "==", toNumId(id))));
-  pSnap.forEach(async (pDoc) => {
-    await deleteDoc(doc(db, "panels", pDoc.id));
-  });
+  const pSnap = await getDocs(query(collection(db, 'panels'), where('chapterId', '==', toNumId(id))));
+  for (const pDoc of pSnap.docs) await deleteDoc(doc(db, 'panels', pDoc.id));
+  await deleteDoc(doc(db, 'chapters', String(id)));
 }
 
-// ─── PANELS CRUD ───
+// ─── Panels ───
+// Panel shape: { type: 'narration'|'dialogue'|'image'|'divider',
+//                text, character, image, order }
+
 export async function getPanels(chapterId) {
   try {
-    const q = query(collection(db, "panels"), where("chapterId", "==", toNumId(chapterId)), orderBy("order", "asc"));
-    const snap = await getDocs(q);
-    const data = [];
-    snap.forEach(doc => {
-      data.push({ id: doc.id, ...doc.data() });
-    });
-    return data;
-  } catch (e) { console.error(e); return []; }
+    const snap = await getDocs(query(collection(db, 'panels'), where('chapterId', '==', toNumId(chapterId))));
+    return snap.docs
+      .map(d => ({ id: d.id, ...d.data() }))
+      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+  } catch (e) { console.error('getPanels:', e); return []; }
 }
 
-// Fungsi internal penunjang managemen editor panel aplikasi kamu
+// Rewrites the chapter's panels in one pass (delete old → write new).
 export async function savePanels(chapterId, panelsArray) {
-  // Reset dan tulis ulang panel array untuk bab ini
-  const q = query(collection(db, "panels"), where("chapterId", "==", toNumId(chapterId)));
-  const oldSnap = await getDocs(q);
-  for (const oDoc of oldSnap.docs) {
-    await deleteDoc(doc(db, "panels", oDoc.id));
-  }
-  
+  const oldSnap = await getDocs(query(collection(db, 'panels'), where('chapterId', '==', toNumId(chapterId))));
+  for (const oDoc of oldSnap.docs) await deleteDoc(doc(db, 'panels', oDoc.id));
+
   for (let i = 0; i < panelsArray.length; i++) {
     const p = panelsArray[i];
-    const pId = `${chapterId}_${i}_${Date.now()}`;
-    await setDoc(doc(db, "panels", pId), {
+    await setDoc(doc(db, 'panels', `${chapterId}_${i}_${Date.now()}`), {
       chapterId: toNumId(chapterId),
-      type: p.type || "narration",
-      text: p.text || "",
-      character: p.character || "",
+      type: p.type || 'narration',
+      text: p.text || '',
+      character: p.character || '',
       image: p.image || null,
       order: i
     });
   }
 }
 
-// ─── PROGRESS BACA (Tetap Simpan di Browser Masing-masing Pembaca) ───
-// Supaya setiap pengunjung IG punya riwayat bacaan mereka sendiri tanpa merusak data terpusat
+// ─── Reading progress (local to each visitor) ───
+
+const PROGRESS_KEY = 'xan_progress';
+
 export async function getAllProgress() {
   try {
-    const localProg = localStorage.getItem("xan_progress");
-    return localProg ? JSON.parse(localProg) : [];
-  } catch (e) { return []; }
+    return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || [];
+  } catch { return []; }
 }
 
 export async function saveProgress(storyId, chapterId, scrollPercent) {
   try {
-    let current = await getAllProgress();
-    current = current.filter(p => toNumId(p.storyId) !== toNumId(storyId));
+    const current = (await getAllProgress()).filter(p => toNumId(p.storyId) !== toNumId(storyId));
     current.push({
       storyId: toNumId(storyId),
       chapterId: toNumId(chapterId),
-      scrollPercent: parseInt(scrollPercent),
+      scrollPercent: Math.round(scrollPercent) || 0,
       lastReadAt: Date.now()
     });
-    localStorage.setItem("xan_progress", JSON.stringify(current));
-  } catch (e) { console.error(e); }
+    localStorage.setItem(PROGRESS_KEY, JSON.stringify(current));
+  } catch (e) { console.error('saveProgress:', e); }
 }
+
+export function clearProgress() {
+  localStorage.removeItem(PROGRESS_KEY);
+}
+
+// ─── Backup ───
+
+export async function exportAllData() {
+  const [stories, chapters, panels] = await Promise.all([
+    getDocs(collection(db, 'stories')),
+    getDocs(collection(db, 'chapters')),
+    getDocs(collection(db, 'panels'))
+  ]);
+  return {
+    stories: stories.docs.map(d => ({ id: d.id, ...d.data() })),
+    chapters: chapters.docs.map(d => ({ id: d.id, ...d.data() })),
+    panels: panels.docs.map(d => ({ id: d.id, ...d.data() })),
+    exportedAt: Date.now(),
+    version: 2
+  };
+}
+
+// Kept for compatibility — data now lives in the cloud.
+export async function seedDemoData() { return true; }

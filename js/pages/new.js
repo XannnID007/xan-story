@@ -1,10 +1,25 @@
-import { addStory } from '../db.js';
+// ═══ New Story — 3-step wizard ═══
+import { addStory, addChapter } from '../db.js';
 import { html, $, $$, on, navigate, GENRES, imageToBase64, compressImage } from '../app.js';
 
+const GENRE_ICONS = {
+  'Slice of life': 'mug-hot',
+  'Thoughts': 'brain',
+  'Fiction': 'wand-magic',
+  'Romance': 'heart',
+  'Dark': 'moon',
+  'Mystery': 'magnifying-glass',
+  'Poetry': 'feather'
+};
+
 export async function renderNewStory() {
+  // Wizard state lives in this closure — survives re-renders between steps.
   let step = 1;
+  let title = '';
+  let description = '';
   let selectedGenre = GENRES[0];
   let coverData = null;
+  let creating = false;
 
   function render() {
     html('#app-view', `
@@ -18,31 +33,27 @@ export async function renderNewStory() {
         </div>
 
         <div class="new-story-form">
-          <!-- Progress dots -->
           <div class="wizard-progress">
-            <div class="wizard-dot ${step >= 1 ? 'done' : ''}"></div>
-            <div class="wizard-dot ${step >= 2 ? 'done' : ''}"></div>
-            <div class="wizard-dot ${step >= 3 ? 'done' : ''}"></div>
+            ${[1, 2, 3].map(n => `<div class="wizard-dot ${step >= n ? 'done' : ''}"></div>`).join('')}
           </div>
 
-          <!-- Step 1: Title & Description -->
+          <!-- Step 1: Title & description -->
           <div class="wizard-step ${step === 1 ? 'active' : ''}">
             <h2 class="wizard-heading">What's your story?</h2>
             <p class="wizard-sub">Give your story a name and a brief description to set the mood.</p>
 
             <div class="form-group">
               <label><i class="fa-solid fa-pencil" style="margin-right:4px"></i> Title <span class="required">*</span></label>
-              <input type="text" id="ns-title" placeholder="e.g. Hujan di Bulan Juni..." autofocus />
+              <input type="text" id="ns-title" placeholder="e.g. Hujan di Bulan Juni..." value="${title}" autofocus />
             </div>
-
             <div class="form-group">
               <label><i class="fa-solid fa-align-left" style="margin-right:4px"></i> Description</label>
-              <textarea id="ns-desc" rows="3" placeholder="A short description about your story..."></textarea>
+              <textarea id="ns-desc" rows="3" placeholder="A short description about your story...">${description}</textarea>
             </div>
 
             <div class="wizard-nav">
               <button class="btn-secondary" id="btn-cancel">Cancel</button>
-              <button class="btn-primary" id="btn-next1"><i class="fa-solid fa-arrow-right"></i> Next</button>
+              <button class="btn-primary" id="btn-next1">Next <i class="fa-solid fa-arrow-right"></i></button>
             </div>
           </div>
 
@@ -52,14 +63,15 @@ export async function renderNewStory() {
             <p class="wizard-sub">Pick a genre that best describes the feeling of your story.</p>
 
             <div class="genre-pills">
-              ${GENRES.map(g => `<button class="genre-pill ${selectedGenre === g ? 'active' : ''}" data-genre="${g}">
-                <i class="fa-solid fa-${genreIcon(g)}" style="margin-right:4px"></i>${g}
-              </button>`).join('')}
+              ${GENRES.map(g => `
+                <button class="genre-pill ${selectedGenre === g ? 'active' : ''}" data-genre="${g}">
+                  <i class="fa-solid fa-${GENRE_ICONS[g] || 'tag'}" style="margin-right:4px"></i>${g}
+                </button>`).join('')}
             </div>
 
             <div class="wizard-nav">
               <button class="btn-secondary" id="btn-back2"><i class="fa-solid fa-arrow-left"></i> Back</button>
-              <button class="btn-primary" id="btn-next2"><i class="fa-solid fa-arrow-right"></i> Next</button>
+              <button class="btn-primary" id="btn-next2">Next <i class="fa-solid fa-arrow-right"></i></button>
             </div>
           </div>
 
@@ -71,9 +83,7 @@ export async function renderNewStory() {
             <div class="form-group">
               <label class="cover-upload" id="cover-upload-label">
                 <div class="cover-upload-content" id="cover-preview">
-                  ${coverData
-                    ? ''
-                    : '<i class="fa-solid fa-image"></i><span>Tap to upload cover image</span>'}
+                  ${coverData ? '' : '<i class="fa-solid fa-image"></i><span>Tap to upload cover image</span>'}
                 </div>
                 <input type="file" id="ns-cover" accept="image/*" hidden />
               </label>
@@ -85,42 +95,42 @@ export async function renderNewStory() {
             </div>
           </div>
         </div>
-
         <div style="height:72px"></div>
       </div>
     `);
 
     bindEvents();
+    if (coverData && step === 3) showCoverPreview();
+  }
 
-    if (coverData && step === 3) {
-      const preview = $('#cover-preview');
-      preview.innerHTML = '';
-      preview.style.backgroundImage = `url(${coverData})`;
-      preview.style.backgroundSize = 'cover';
-      preview.style.backgroundPosition = 'center';
-    }
+  function showCoverPreview() {
+    const preview = $('#cover-preview');
+    preview.innerHTML = '';
+    preview.style.backgroundImage = `url(${coverData})`;
+    preview.style.backgroundSize = 'cover';
+    preview.style.backgroundPosition = 'center';
   }
 
   function bindEvents() {
     on('#btn-ns-back', 'click', () => navigate('/'));
     on('#btn-cancel', 'click', () => navigate('/'));
 
-    // Step 1 → 2
-    if ($('#btn-next1')) {
-      on('#btn-next1', 'click', () => {
-        const title = $('#ns-title').value.trim();
-        if (!title) {
-          $('#ns-title').focus();
-          $('#ns-title').style.borderColor = 'var(--danger)';
-          setTimeout(() => { $('#ns-title').style.borderColor = ''; }, 2000);
-          return;
-        }
-        step = 2;
-        render();
-      });
-    }
+    // Keep wizard state in sync as the user types
+    on('#ns-title', 'input', e => { title = e.target.value; });
+    on('#ns-desc', 'input', e => { description = e.target.value; });
 
-    // Step 2 ↔ genre selection
+    on('#btn-next1', 'click', () => {
+      if (!title.trim()) {
+        const input = $('#ns-title');
+        input.focus();
+        input.style.borderColor = 'var(--danger)';
+        setTimeout(() => { input.style.borderColor = ''; }, 2000);
+        return;
+      }
+      step = 2;
+      render();
+    });
+
     $$('.genre-pill').forEach(el => {
       on(el, 'click', () => {
         $$('.genre-pill').forEach(b => b.classList.remove('active'));
@@ -129,79 +139,43 @@ export async function renderNewStory() {
       });
     });
 
-    if ($('#btn-back2')) on('#btn-back2', 'click', () => { step = 1; render(); restoreFields(); });
-    if ($('#btn-next2')) on('#btn-next2', 'click', () => { step = 3; render(); });
+    on('#btn-back2', 'click', () => { step = 1; render(); });
+    on('#btn-next2', 'click', () => { step = 3; render(); });
+    on('#btn-back3', 'click', () => { step = 2; render(); });
 
-    // Step 3 ↔ cover
-    if ($('#btn-back3')) on('#btn-back3', 'click', () => { step = 2; render(); });
-
-    on('#cover-upload-label', 'click', () => { $('#ns-cover').click(); });
-    on('#ns-cover', 'change', async (e) => {
+    on('#cover-upload-label', 'click', () => $('#ns-cover').click());
+    on('#ns-cover', 'change', async e => {
       const file = e.target.files[0];
       if (!file) return;
       const b64 = await imageToBase64(file);
       coverData = await compressImage(b64, 800, 0.7);
-      const preview = $('#cover-preview');
-      preview.innerHTML = '';
-      preview.style.backgroundImage = `url(${coverData})`;
-      preview.style.backgroundSize = 'cover';
-      preview.style.backgroundPosition = 'center';
+      showCoverPreview();
     });
 
-    // Create
-    if ($('#btn-create')) {
-      on('#btn-create', 'click', async () => {
-        // We need to get title from step 1 — store in DOM
-        const titleEl = document.querySelector('[data-saved-title]');
-        const title = titleEl ? titleEl.dataset.savedTitle : (localStorage.getItem('_xan_new_title') || 'Untitled');
-        const desc = localStorage.getItem('_xan_new_desc') || '';
+    on('#btn-create', 'click', async () => {
+      if (creating) return;
+      creating = true;
+      const btn = $('#btn-create');
+      btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Creating...';
 
-        const { storyId, chapterId } = await addStory({
-          title,
-          description: desc,
+      try {
+        const storyId = await addStory({
+          title: title.trim(),
+          description: description.trim(),
           genre: selectedGenre,
-          coverImage: coverData
+          coverImage: coverData,
+          status: 'draft'
         });
-
-        localStorage.removeItem('_xan_new_title');
-        localStorage.removeItem('_xan_new_desc');
+        const chapterId = await addChapter(storyId, 'Chapter 1');
         navigate(`/edit/${storyId}/${chapterId}`);
-      });
-    }
-
-    // Save fields to localStorage for persistence across steps
-    if ($('#ns-title')) {
-      const savedTitle = localStorage.getItem('_xan_new_title');
-      const savedDesc = localStorage.getItem('_xan_new_desc');
-      if (savedTitle) $('#ns-title').value = savedTitle;
-      if (savedDesc && $('#ns-desc')) $('#ns-desc').value = savedDesc;
-
-      on('#ns-title', 'input', (e) => localStorage.setItem('_xan_new_title', e.target.value));
-      on('#ns-desc', 'input', (e) => localStorage.setItem('_xan_new_desc', e.target.value));
-    }
+      } catch (err) {
+        console.error(err);
+        alert('Gagal membuat cerita: ' + err.message);
+        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> Create story';
+        creating = false;
+      }
+    });
   }
 
-  function restoreFields() {
-    const savedTitle = localStorage.getItem('_xan_new_title');
-    const savedDesc = localStorage.getItem('_xan_new_desc');
-    if (savedTitle && $('#ns-title')) $('#ns-title').value = savedTitle;
-    if (savedDesc && $('#ns-desc')) $('#ns-desc').value = savedDesc;
-  }
-
-  localStorage.removeItem('_xan_new_title');
-  localStorage.removeItem('_xan_new_desc');
   render();
-}
-
-function genreIcon(genre) {
-  const map = {
-    'Slice of life': 'mug-hot',
-    'Thoughts': 'brain',
-    'Fiction': 'wand-magic',
-    'Romance': 'heart',
-    'Dark': 'moon',
-    'Mystery': 'magnifying-glass',
-    'Poetry': 'feather'
-  };
-  return map[genre] || 'tag';
 }

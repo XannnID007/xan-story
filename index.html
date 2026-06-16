@@ -1,41 +1,28 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#08080f" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <meta name="theme-color" content="#110e1c" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <title>xanstory — visual storytelling</title>
 
-  <!-- Icons — Font Awesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
-
-  <!-- Styles -->
   <link rel="stylesheet" href="css/style.css" />
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js" type="module"></script>
 
-  <!-- Dexie.js -->
-  <script src="https://unpkg.com/dexie@4.0.11/dist/dexie.min.js"></script>
-
-  <!-- Fallback splash removal -->
-  <script>setTimeout(function () { var s = document.getElementById('splash'); if (s) { s.style.opacity = '0'; setTimeout(function () { s.remove() }, 400) } }, 4000);</script>
+  <script>setTimeout(function(){var s=document.getElementById('splash');if(s){s.style.opacity='0';setTimeout(function(){s.remove();},500);}},5000);</script>
 </head>
-
 <body>
 
-<div id="splash">
+  <div id="splash">
     <div class="splash-logo">
       <svg class="splash-bf-icon" viewBox="0 0 24 24" fill="none">
-        <defs>
-          <linearGradient id="splashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="#c9a8ff" />
-            <stop offset="100%" stop-color="#9b6dd4" />
-          </linearGradient>
-        </defs>
+        <defs><linearGradient id="splashGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+          <stop offset="0%" stop-color="#e07aff" /><stop offset="100%" stop-color="#8808c3" />
+        </linearGradient></defs>
         <path d="M3 4C6 4 11 9 12 12C13 9 18 4 21 4C19 9 14 11 12 12C14 13 19 15 21 20C18 20 13 15 12 12C11 15 6 20 3 20C5 15 10 13 12 12C10 11 5 9 3 4Z" fill="url(#splashGrad)"/>
       </svg>
       <span class="splash-text">anstory</span>
@@ -49,21 +36,14 @@
 
     <nav id="bottom-nav">
       <button class="bnav-item active" data-route="/">
-        <i class="fa-solid fa-house"></i>
-        <span>Home</span>
-      </button>
-      <button class="bnav-item" data-route="/new">
-        <i class="fa-solid fa-feather"></i>
-        <span>Write</span>
+        <i class="fa-solid fa-house"></i><span>Home</span>
       </button>
       <button class="bnav-item" data-route="/settings">
-        <i class="fa-solid fa-gear"></i>
-        <span>Settings</span>
+        <i class="fa-solid fa-gear"></i><span>Settings</span>
       </button>
     </nav>
   </div>
 
   <script type="module" src="js/main.js"></script>
 </body>
-
 </html>

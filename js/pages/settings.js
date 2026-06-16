@@ -1,4 +1,5 @@
-import { savePanels } from '../db.js';
+// ═══ Settings — admin, backup, reading history ═══
+import { getAllStories, exportAllData, clearProgress, checkAdminStatus, adminLogout } from '../db.js';
 import { html, $, on, navigate } from '../app.js';
 
 export async function renderSettings() {
@@ -16,34 +17,37 @@ export async function renderSettings() {
 
       <div class="settings-list">
         <div class="settings-group">
+          <div class="settings-group-title">Account</div>
+          <div class="settings-item" id="item-auth">
+            <div class="settings-item-info">
+              <i class="fa-solid fa-user-shield"></i>
+              <div>
+                <div class="settings-item-label" id="auth-label">Checking...</div>
+                <div class="settings-item-desc" id="auth-desc">Please wait</div>
+              </div>
+            </div>
+            <i class="fa-solid fa-chevron-right settings-arrow"></i>
+          </div>
+        </div>
+
+        <div class="settings-group">
           <div class="settings-group-title">Data</div>
           <div class="settings-item" id="item-export">
             <div class="settings-item-info">
               <i class="fa-solid fa-download"></i>
               <div>
                 <div class="settings-item-label">Export backup</div>
-                <div class="settings-item-desc">${stories.length} stories will be saved</div>
+                <div class="settings-item-desc">${stories.length} stories will be saved as JSON</div>
               </div>
             </div>
             <i class="fa-solid fa-chevron-right settings-arrow"></i>
           </div>
-          <div class="settings-item" id="item-import">
+          <div class="settings-item" id="item-clear-history">
             <div class="settings-item-info">
-              <i class="fa-solid fa-upload"></i>
+              <i class="fa-solid fa-clock-rotate-left"></i>
               <div>
-                <div class="settings-item-label">Import backup</div>
-                <div class="settings-item-desc">Restore from a backup file</div>
-              </div>
-            </div>
-            <i class="fa-solid fa-chevron-right settings-arrow"></i>
-            <input type="file" id="import-file" accept=".json" hidden />
-          </div>
-          <div class="settings-item danger" id="item-clear">
-            <div class="settings-item-info">
-              <i class="fa-solid fa-trash-can"></i>
-              <div>
-                <div class="settings-item-label">Clear all data</div>
-                <div class="settings-item-desc">Delete everything permanently</div>
+                <div class="settings-item-label">Clear reading history</div>
+                <div class="settings-item-desc">Reset your local reading progress</div>
               </div>
             </div>
             <i class="fa-solid fa-chevron-right settings-arrow"></i>
@@ -57,7 +61,7 @@ export async function renderSettings() {
               <i class="fa-solid fa-heart"></i>
               <div>
                 <div class="settings-item-label">xanstory v1.0</div>
-                <div class="settings-item-desc">Data stored locally in your browser</div>
+                <div class="settings-item-desc">Stories live in the cloud · history stays on your device</div>
               </div>
             </div>
           </div>
@@ -78,40 +82,58 @@ export async function renderSettings() {
 
   on('#btn-set-back', 'click', () => navigate('/'));
 
+  // ─── Admin login / logout ───
+  let isLoggedIn = false;
+  checkAdminStatus((loggedIn, user) => {
+    isLoggedIn = loggedIn;
+    const label = $('#auth-label');
+    const desc = $('#auth-desc');
+    if (!label || !desc) return;
+    if (loggedIn) {
+      label.textContent = 'Logout admin';
+      desc.textContent = `Logged in as ${user.email}`;
+    } else {
+      label.textContent = 'Admin login';
+      desc.textContent = 'Sign in to manage stories';
+    }
+  });
+
+  on('#item-auth', 'click', async () => {
+    if (isLoggedIn) {
+      if (confirm('Logout dari admin?')) {
+        await adminLogout();
+        toast('Logged out');
+        setTimeout(() => renderSettings(), 800);
+      }
+    } else {
+      navigate('/login');
+    }
+  });
+
+  // ─── Backup ───
   on('#item-export', 'click', async () => {
-    const data = await exportAllData();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `xanstory-backup-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    toast('Backup downloaded!');
-  });
-
-  on('#item-import', 'click', () => $('#import-file').click());
-  on('#import-file', 'change', async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
+    toast('Preparing backup...');
     try {
-      const data = JSON.parse(await file.text());
-      if (!data.stories || !data.version) { toast('Invalid backup'); return; }
-      if (confirm('Replace all existing data?')) {
-        await importAllData(data);
-        toast('Restored!');
-        setTimeout(() => navigate('/'), 1000);
-      }
-    } catch { toast('Failed to read file'); }
+      const data = await exportAllData();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `xanstory-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Backup downloaded!');
+    } catch (err) {
+      console.error(err);
+      toast('Export failed');
+    }
   });
 
-  on('#item-clear', 'click', async () => {
-    if (confirm('Delete ALL data? This cannot be undone!')) {
-      if (confirm('Really sure? Export backup first if needed.')) {
-        await importAllData({ stories: [], chapters: [], panels: [], progress: [], settings: [], version: 1 });
-        toast('All data cleared');
-        setTimeout(() => navigate('/'), 1000);
-      }
+  // ─── Reading history ───
+  on('#item-clear-history', 'click', () => {
+    if (confirm('Clear your reading history? Stories will not be affected.')) {
+      clearProgress();
+      toast('Reading history cleared');
     }
   });
 }
